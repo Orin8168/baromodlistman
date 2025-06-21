@@ -1,1 +1,1 @@
-A manager for barotrauma's .xml modlist files
+A manager for Barotrauma's .xml modlist files
