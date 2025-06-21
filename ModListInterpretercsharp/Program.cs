@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Xml.Linq;
@@ -8,7 +10,7 @@ using System.Xml.Linq;
 
 class Reader
 {
-    static void Main(string[] inputFile)
+    static void Main(string[] pathArg)
     {
         static void OpenUrl(string url)
         {
@@ -138,49 +140,112 @@ class Reader
         }//xml validator
 
         Console.Title = "Barotrauma Modlist Manager";
-//        string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName!;
-//        string exeDirectory = Path.GetDirectoryName(exePath)!;
-//        string configPath = Path.Combine(exeDirectory, "config.json");
-//        string apiKey = "";
-//        if (!File.Exists(configPath))
-//        {
-//            var configText = new { key = "" };
-//            string json = JsonSerializer.Serialize(configText, new JsonSerializerOptions { WriteIndented = true });
-//            File.WriteAllText(configPath, json);
-//            string configContent = File.ReadAllText(configPath);
-//            JsonDocument config = JsonDocument.Parse(configContent);
-//            JsonElement root = config.RootElement;
-//            if (root.TryGetProperty("key", out JsonElement Key))
-//            {
-//                string iKey = Key.GetString();
-//                Console.WriteLine("Key: " + iKey);
-//            }
-//        }
-//        else
-//        {
-//            string configContent = File.ReadAllText(configPath);
-//            JsonDocument config = JsonDocument.Parse(configContent);
-//            JsonElement root = config.RootElement;
-//            if (root.TryGetProperty("key", out JsonElement Key))
-//            {
-//                string iKey = Key.GetString();
-//                Console.WriteLine("Key: " + iKey);
-//            }
-//        }             this is for a scrapped config for a key
-        if (inputFile.Length < 1)
+                string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName!;
+                string exeDirectory = Path.GetDirectoryName(exePath)!;
+                string configPath = Path.Combine(exeDirectory, "config.json");  //get path to config file
+                string baroPath = "";
+                if (!File.Exists(configPath))   //check if config exists
+                {
+                    var configText = new { BarotraumaPathEscaped = "" };
+                    string json = JsonSerializer.Serialize(configText, new JsonSerializerOptions { WriteIndented = true });
+                    File.WriteAllText(configPath, json);
+                    string configContent = File.ReadAllText(configPath);
+                    JsonDocument config = JsonDocument.Parse(configContent);
+                    JsonElement root = config.RootElement;
+                    if (root.TryGetProperty("BarotraumaPathEscaped", out JsonElement bPath))
+                    {
+                        baroPath = bPath.GetString();
+                        baroPath = Path.Combine(baroPath, "ModLists");
+                    }   //if it doesnt create and read it
+                }   
+                else
+                {
+                    string configContent = File.ReadAllText(configPath);
+                    JsonDocument config = JsonDocument.Parse(configContent);
+                    JsonElement root = config.RootElement;
+                    if (root.TryGetProperty("BarotraumaPathEscaped", out JsonElement bPath))
+                    {
+                        baroPath = bPath.GetString();
+                        baroPath = Path.Combine(baroPath, "ModLists");
+                    }   //if it does read it
+                }
+        string loadedFile = "";
+        if (pathArg.Length < 1)
         {
             Console.WriteLine("No input given");
-            Console.WriteLine("Please drag and drop the modlist.xml on the exe file to read!");
-            Console.WriteLine("Note: the exe in your file explorer, not the command prompt window.");
-            Console.WriteLine("Press enter to exit...");
-            Console.ReadLine();
-        }   //invalid path check
-        else if (validateFile(inputFile[0]))
+            Console.WriteLine("Checking Barotrauma's directory...");
+            if (!string.IsNullOrEmpty(baroPath))
+            {
+                List<string> modLists = Directory.GetFiles(baroPath).ToList();
+                if (modLists.Count > 0)
+                {
+                    List<string> xmlModLists = new List<string>();
+                    for (int i = 0; i < modLists.Count; i++)
+                    {
+                        if (!Path.GetExtension(modLists[i]).Equals(".xml", StringComparison.OrdinalIgnoreCase))
+                        {
+                            modLists.RemoveAt(i);
+                        }
+                        else
+                        {
+                            xmlModLists.Add(modLists[i]);
+                        }
+                    }
+                    for (int i = 0; i < xmlModLists.Count; i++)
+                    {
+                        int fileNum = i + 1;
+                        Console.WriteLine("(" + fileNum + ") - " + Path.GetFileNameWithoutExtension(xmlModLists[i]));
+                    }
+                    string userFile = Console.ReadLine();
+                    if (!string.IsNullOrEmpty(userFile))
+                    {
+                        try
+                        {
+                            int userIndex = int.Parse(userFile);
+                            userIndex = userIndex - 1;
+                            if (userIndex < 0)
+                            {
+                                userIndex = 0;
+                            }
+                            else if (userIndex > xmlModLists.Count)
+                            {
+                                userIndex = xmlModLists.Count;
+                            }
+                            loadedFile = xmlModLists[userIndex];
+                            Console.WriteLine("Loaded: " + loadedFile);
+                        }
+                        catch
+                        {
+                            Console.WriteLine("Invalid input!");
+                            return;
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Modlists folder is empty!");
+                    return;
+                }
+            }
+            else if (!Directory.Exists(baroPath))
+            {
+                Console.WriteLine("Barotrauma directory doesn't exist!");
+            }
+            else
+            {
+                Console.WriteLine("Empty Barotrauma path in " + configPath + " Please input a path or input a file to continue!");
+            }
+        }
+        else
+        {
+            loadedFile = pathArg[0];
+        }
+        if (validateFile(loadedFile))
         {
             Console.WriteLine("Passed file check, checking xml.");
-            if (validateModList(inputFile[0]))
+            if (validateModList(loadedFile))
             {
-                XDocument xmlIn = XDocument.Load(inputFile[0]);
+                XDocument xmlIn = XDocument.Load(loadedFile);
                 XElement root = xmlIn.Root;
                 var subElements = root.Elements().ToList();
                 Console.WriteLine("File is a valid Barotrauma modlist.");
@@ -202,13 +267,13 @@ class Reader
                         var attributes = subElements[i].Attributes().ToList();
                         if (subElements[i].Name == "Workshop")
                         {
-                            Console.WriteLine("Adding workshop mod:" + attributes[0].Value + " (id: " + attributes[1].Value + ")");
+                            Console.WriteLine("Adding workshop mod: " + attributes[0].Value + " (id: " + attributes[1].Value + ")");
                             output += attributes[0].Value + "\n";
                             output += "https://steamcommunity.com/sharedfiles/filedetails/?id=" + attributes[1].Value + "\n\n";
                         }
                         else
                         {
-                            Console.WriteLine("Adding local mod:" + attributes[0].Value);
+                            Console.WriteLine("Adding local mod: " + attributes[0].Value);
                             output += attributes[0].Value + "\n\n";
                         }
                     }
