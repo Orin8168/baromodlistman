@@ -5,7 +5,10 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Xml;
 using System.Xml.Linq;
+using Tomlyn;
+using Tomlyn.Model;
 
 
 class Reader
@@ -140,35 +143,29 @@ class Reader
         }//xml validator
 
         Console.Title = "Barotrauma Modlist Manager";
-                string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName!;
-                string exeDirectory = Path.GetDirectoryName(exePath)!;
-                string configPath = Path.Combine(exeDirectory, "config.json");  //get path to config file
-                string baroPath = "";
-                if (!File.Exists(configPath))   //check if config exists
-                {
-                    var configText = new { BarotraumaPathEscaped = "" };
-                    string json = JsonSerializer.Serialize(configText, new JsonSerializerOptions { WriteIndented = true });
-                    File.WriteAllText(configPath, json);
-                    string configContent = File.ReadAllText(configPath);
-                    JsonDocument config = JsonDocument.Parse(configContent);
-                    JsonElement root = config.RootElement;
-                    if (root.TryGetProperty("BarotraumaPathEscaped", out JsonElement bPath))
-                    {
-                        baroPath = bPath.GetString();
-                        baroPath = Path.Combine(baroPath, "ModLists");
-                    }   //if it doesnt create and read it
-                }   
-                else
-                {
-                    string configContent = File.ReadAllText(configPath);
-                    JsonDocument config = JsonDocument.Parse(configContent);
-                    JsonElement root = config.RootElement;
-                    if (root.TryGetProperty("BarotraumaPathEscaped", out JsonElement bPath))
-                    {
-                        baroPath = bPath.GetString();
-                        baroPath = Path.Combine(baroPath, "ModLists");
-                    }   //if it does read it
-                }
+        string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName!;
+        string exeDirectory = Path.GetDirectoryName(exePath)!;
+        string configPath = Path.Combine(exeDirectory, "config.toml");  //get path to config file
+
+
+        string baroPath = "";
+        if (!File.Exists(configPath))   //check if config exists
+        {
+            var toml = @"BarotraumaPath = """"
+            # The input above needs to be escaped (\->\\)";
+            var model = Toml.ToModel(toml);
+            File.WriteAllText(configPath, Toml.FromModel(model));
+            string configContent = File.ReadAllText(configPath);
+            Console.WriteLine("Created config.toml\nPlease fill in 'BarotraumaPath' and restart to use the file selector");
+        }
+        else
+        {
+            string configContent = File.ReadAllText(configPath);
+            var configData = Toml.Parse(configContent).ToModel();
+            baroPath = @configData["BarotraumaPath"]?.ToString();
+            baroPath = @Path.Combine(baroPath.Replace('/', Path.DirectorySeparatorChar), "ModLists");
+            Console.WriteLine("Path: " + baroPath);
+        }
         string loadedFile = "";
         if (pathArg.Length < 1)
         {
